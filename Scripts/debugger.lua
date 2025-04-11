@@ -84,104 +84,150 @@ function Debugger:CreateWindow()
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "DebuggerUI"
     ScreenGui.ResetOnSpawn = false
-    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling -- Ensure it can draw over others
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     ScreenGui.Parent = game:GetService("CoreGui")
 
     local Window = Instance.new("Frame")
     Window.Name = "MainWindow"
-    Window.Size = UDim2.new(0, 800, 0, 600)
-    Window.Position = UDim2.new(0.5, -400, 0.5, -300)
-    Window.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    Window.Size = UDim2.new(0, 1000, 0, 700) -- Larger window
+    Window.Position = UDim2.new(0.5, -500, 0.5, -350)
+    Window.BackgroundColor3 = Color3.fromRGB(25, 25, 25) -- Darker background
     Window.BorderSizePixel = 0
     Window.Draggable = true
     Window.Active = true
     Window.Selectable = true
     Window.Parent = ScreenGui
 
-    -- Title bar
+    -- Title bar with gradient
     local TitleBar = Instance.new("Frame")
     TitleBar.Name = "TitleBar"
-    TitleBar.Size = UDim2.new(1, 0, 0, 30)
-    TitleBar.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    TitleBar.Size = UDim2.new(1, 0, 0, 35)
+    TitleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
     TitleBar.Parent = Window
 
     local Title = Instance.new("TextLabel")
     Title.Name = "Title"
     Title.Size = UDim2.new(1, -40, 1, 0)
-    Title.Position = UDim2.new(0, 5, 0, 0) -- Add padding
+    Title.Position = UDim2.new(0, 10, 0, 0)
     Title.BackgroundTransparency = 1
     Title.Text = "Roblox Script Debugger"
     Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Title.Font = Enum.Font.SourceSansBold
-    Title.TextSize = 14
+    Title.Font = Enum.Font.GothamBold
+    Title.TextSize = 16
     Title.TextXAlignment = Enum.TextXAlignment.Left
-    Title.TextWrapped = false
     Title.Parent = TitleBar
 
     local CloseButton = Instance.new("TextButton")
     CloseButton.Name = "CloseButton"
-    CloseButton.Size = UDim2.new(0, 30, 0, 30)
-    CloseButton.Position = UDim2.new(1, -30, 0, 0)
+    CloseButton.Size = UDim2.new(0, 35, 0, 35)
+    CloseButton.Position = UDim2.new(1, -35, 0, 0)
     CloseButton.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
     CloseButton.Text = "X"
     CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    CloseButton.Font = Enum.Font.SourceSansBold
+    CloseButton.Font = Enum.Font.GothamBold
     CloseButton.TextSize = 16
     CloseButton.Parent = TitleBar
     CloseButton.MouseButton1Click:Connect(function()
-        self:Stop() -- Stop debugging on close
+        self:Stop()
         ScreenGui:Destroy()
     end)
 
-    -- Control buttons
+    -- Control buttons with better styling
     local Controls = Instance.new("Frame")
     Controls.Name = "Controls"
-    Controls.Size = UDim2.new(1, 0, 0, 40)
-    Controls.Position = UDim2.new(0, 0, 0, 30)
-    Controls.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    Controls.Size = UDim2.new(1, 0, 0, 45)
+    Controls.Position = UDim2.new(0, 0, 0, 35)
+    Controls.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     Controls.Parent = Window
 
-    local function CreateButton(name, text, position, width)
+    local function CreateButton(name, text, position, width, color)
         local button = Instance.new("TextButton")
         button.Name = name
-        button.Size = UDim2.new(0, width or 80, 0, 30)
+        button.Size = UDim2.new(0, width or 100, 0, 35)
         button.Position = position
-        button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        button.BackgroundColor3 = color or Color3.fromRGB(60, 60, 60)
         button.TextColor3 = Color3.fromRGB(220, 220, 220)
-        button.Font = Enum.Font.SourceSans
+        button.Font = Enum.Font.Gotham
         button.TextSize = 14
         button.Text = text
+        button.AutoButtonColor = true
         button.Parent = Controls
+        
+        -- Add hover effect
+        local originalColor = button.BackgroundColor3
+        button.MouseEnter:Connect(function()
+            button.BackgroundColor3 = Color3.fromRGB(
+                math.min(originalColor.R * 255 + 20, 255),
+                math.min(originalColor.G * 255 + 20, 255),
+                math.min(originalColor.B * 255 + 20, 255)
+            )
+        end)
+        button.MouseLeave:Connect(function()
+            button.BackgroundColor3 = originalColor
+        end)
+        
         return button
     end
 
-    local ResumeButton = CreateButton("ResumeButton", "Resume", UDim2.new(0, 10, 0, 5))
-    local PauseButton = CreateButton("PauseButton", "Pause", UDim2.new(0, 100, 0, 5))
-    local StepOverButton = CreateButton("StepOverButton", "Step Over", UDim2.new(0, 190, 0, 5), 90)
-    -- local StepIntoButton = CreateButton("StepIntoButton", "Step Into", UDim2.new(0, 290, 0, 5), 90) -- Future Add
-    -- local StepOutButton = CreateButton("StepOutButton", "Step Out", UDim2.new(0, 390, 0, 5), 90)   -- Future Add
-    local StopButton = CreateButton("StopButton", "Stop", UDim2.new(0, 290, 0, 5))
+    -- Create control buttons with better colors
+    local ResumeButton = CreateButton("ResumeButton", "▶ Resume", UDim2.new(0, 10, 0, 5), 100, Color3.fromRGB(50, 150, 50))
+    local PauseButton = CreateButton("PauseButton", "⏸ Pause", UDim2.new(0, 120, 0, 5), 100, Color3.fromRGB(200, 150, 50))
+    local StepOverButton = CreateButton("StepOverButton", "⏭ Step Over", UDim2.new(0, 230, 0, 5), 120, Color3.fromRGB(50, 100, 200))
+    local StopButton = CreateButton("StopButton", "⏹ Stop", UDim2.new(0, 360, 0, 5), 100, Color3.fromRGB(200, 50, 50))
 
-    -- Main content area
+    -- Add speed control
+    local SpeedLabel = Instance.new("TextLabel")
+    SpeedLabel.Name = "SpeedLabel"
+    SpeedLabel.Size = UDim2.new(0, 60, 0, 35)
+    SpeedLabel.Position = UDim2.new(0, 470, 0, 5)
+    SpeedLabel.BackgroundTransparency = 1
+    SpeedLabel.Text = "Speed:"
+    SpeedLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    SpeedLabel.Font = Enum.Font.Gotham
+    SpeedLabel.TextSize = 14
+    SpeedLabel.TextXAlignment = Enum.TextXAlignment.Right
+    SpeedLabel.Parent = Controls
+
+    local SpeedSlider = Instance.new("TextButton")
+    SpeedSlider.Name = "SpeedSlider"
+    SpeedSlider.Size = UDim2.new(0, 150, 0, 35)
+    SpeedSlider.Position = UDim2.new(0, 540, 0, 5)
+    SpeedSlider.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    SpeedSlider.Text = "1x"
+    SpeedSlider.TextColor3 = Color3.fromRGB(220, 220, 220)
+    SpeedSlider.Font = Enum.Font.Gotham
+    SpeedSlider.TextSize = 14
+    SpeedSlider.Parent = Controls
+
+    -- Speed control functionality
+    local speeds = {0.25, 0.5, 1, 2, 4}
+    local currentSpeedIndex = 3 -- Start at 1x
+    SpeedSlider.MouseButton1Click:Connect(function()
+        currentSpeedIndex = currentSpeedIndex % #speeds + 1
+        self.ExecutionSpeed = speeds[currentSpeedIndex]
+        SpeedSlider.Text = speeds[currentSpeedIndex] .. "x"
+    end)
+
+    -- Main content area with better layout
     local Content = Instance.new("Frame")
     Content.Name = "Content"
-    Content.Size = UDim2.new(1, 0, 1, -70)
-    Content.Position = UDim2.new(0, 0, 0, 70)
-    Content.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    Content.Size = UDim2.new(1, 0, 1, -80)
+    Content.Position = UDim2.new(0, 0, 0, 80)
+    Content.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     Content.Parent = Window
 
-    -- Split view
+    -- Split view with better proportions
     local LeftPanel = Instance.new("Frame")
     LeftPanel.Name = "LeftPanel"
-    LeftPanel.Size = UDim2.new(0.6, 0, 1, 0)
-    LeftPanel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    LeftPanel.Size = UDim2.new(0.7, 0, 1, 0)
+    LeftPanel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
     LeftPanel.Parent = Content
 
     local RightPanel = Instance.new("Frame")
     RightPanel.Name = "RightPanel"
-    RightPanel.Size = UDim2.new(0.4, 0, 1, 0)
-    RightPanel.Position = UDim2.new(0.6, 0, 0, 0)
-    RightPanel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    RightPanel.Size = UDim2.new(0.3, 0, 1, 0)
+    RightPanel.Position = UDim2.new(0.7, 0, 0, 0)
+    RightPanel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
     RightPanel.Parent = Content
 
     local function CreatePanel(name, parent, size, position)
@@ -189,34 +235,33 @@ function Debugger:CreateWindow()
         Panel.Name = name .. "Container"
         Panel.Size = size
         Panel.Position = position
-        Panel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        Panel.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
         Panel.BorderSizePixel = 1
         Panel.BorderColor3 = Color3.fromRGB(40, 40, 40)
         Panel.Parent = parent
 
         local PanelTitle = Instance.new("TextLabel")
         PanelTitle.Name = name .. "Title"
-        PanelTitle.Size = UDim2.new(1, 0, 0, 20)
-        PanelTitle.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-        PanelTitle.Text = "  " .. name -- Padding
+        PanelTitle.Size = UDim2.new(1, 0, 0, 25)
+        PanelTitle.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        PanelTitle.Text = "  " .. name
         PanelTitle.TextColor3 = Color3.fromRGB(200, 200, 200)
-        PanelTitle.Font = Enum.Font.SourceSans
-        PanelTitle.TextSize = 12
+        PanelTitle.Font = Enum.Font.Gotham
+        PanelTitle.TextSize = 14
         PanelTitle.TextXAlignment = Enum.TextXAlignment.Left
         PanelTitle.Parent = Panel
 
         local ScrollingFrame = Instance.new("ScrollingFrame")
         ScrollingFrame.Name = name
-        ScrollingFrame.Size = UDim2.new(1, 0, 1, -20)
-        ScrollingFrame.Position = UDim2.new(0, 0, 0, 20)
-        ScrollingFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        ScrollingFrame.Size = UDim2.new(1, 0, 1, -25)
+        ScrollingFrame.Position = UDim2.new(0, 0, 0, 25)
+        ScrollingFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
         ScrollingFrame.BorderSizePixel = 0
-        ScrollingFrame.ScrollBarThickness = 6
-        ScrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
+        ScrollingFrame.ScrollBarThickness = 8
+        ScrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(60, 60, 60)
         ScrollingFrame.ScrollingDirection = Enum.ScrollingDirection.Y
         ScrollingFrame.Parent = Panel
 
-        -- Add UIListLayout for content management
         local layout = Instance.new("UIListLayout")
         layout.Name = name .. "Layout"
         layout.Parent = ScrollingFrame
@@ -226,45 +271,26 @@ function Debugger:CreateWindow()
         return ScrollingFrame
     end
 
-    -- Populate UI references
+    -- Create panels with better proportions
     self.UI.CodeEditorContent = CreatePanel("Source", LeftPanel, UDim2.new(1, 0, 0.6, 0), UDim2.new(0, 0, 0, 0))
     self.UI.OutputConsoleContent = CreatePanel("Output", LeftPanel, UDim2.new(1, 0, 0.4, 0), UDim2.new(0, 0, 0.6, 0))
     self.UI.VariablesPanelContent = CreatePanel("Variables", RightPanel, UDim2.new(1, 0, 0.4, 0), UDim2.new(0, 0, 0, 0))
     self.UI.CallStackPanelContent = CreatePanel("Call Stack", RightPanel, UDim2.new(1, 0, 0.3, 0), UDim2.new(0, 0, 0.4, 0))
     self.UI.BreakpointsPanelContent = CreatePanel("Breakpoints", RightPanel, UDim2.new(1, 0, 0.3, 0), UDim2.new(0, 0, 0.7, 0))
 
-    -- Add drag functionality to the window
-    local UserInputService = game:GetService("UserInputService")
-    local dragging
-    local dragInput
-    local dragStart
-    local startPos
-
-    local function update(input)
-        local delta = input.Position - dragStart
-        Window.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-
-    TitleBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = Window.Position
-            Window.Active = true -- Bring window to front
-        end
-    end)
-
-    TitleBar.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            update(input)
-        end
-    end)
+    -- Add help text
+    local HelpText = Instance.new("TextLabel")
+    HelpText.Name = "HelpText"
+    HelpText.Size = UDim2.new(1, -20, 0, 40)
+    HelpText.Position = UDim2.new(0, 10, 0, 5)
+    HelpText.BackgroundTransparency = 1
+    HelpText.Text = "Click on code lines to add/remove breakpoints. Use the control buttons to debug."
+    HelpText.TextColor3 = Color3.fromRGB(150, 150, 150)
+    HelpText.Font = Enum.Font.Gotham
+    HelpText.TextSize = 12
+    HelpText.TextXAlignment = Enum.TextXAlignment.Left
+    HelpText.TextWrapped = true
+    HelpText.Parent = self.UI.CodeEditorContent
 
     -- Button functionality
     ResumeButton.MouseButton1Click:Connect(function()
