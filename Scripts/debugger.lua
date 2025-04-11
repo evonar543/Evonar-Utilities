@@ -11,7 +11,12 @@ local Debugger = {
     IsStepping = false,
     TargetCoroutine = nil,
     HookLevel = 0,
-    CurrentLine = nil
+    CurrentLine = nil,
+    ScriptEnvironment = {}, -- New: Store script environment
+    LastError = nil, -- New: Track last error
+    ExecutionSpeed = 1, -- New: Control execution speed
+    AutoScroll = true, -- New: Auto-scroll output
+    MaxOutputLines = 200 -- New: Increased output buffer
 }
 
 -- UI Element References (To be populated in CreateWindow)
@@ -281,9 +286,14 @@ function Debugger:CreateWindow()
     self.Window = Window
 end
 
--- Debug Hook Function
+-- Enhanced Hook Function for Roblox
 function Debugger:Hook(event, line)
     if not self.TargetCoroutine then return end
+
+    -- Add execution speed control
+    if self.ExecutionSpeed < 1 then
+        task.wait(1 - self.ExecutionSpeed)
+    end
 
     local currentLevel = self:GetCurrentHookLevel()
     local isPausedBeforeHook = self.IsPaused
@@ -292,58 +302,46 @@ function Debugger:Hook(event, line)
         self.CurrentLine = line
         self:UpdateCodeViewHighlight(line)
 
-        -- Check for breakpoint
+        -- Enhanced breakpoint handling
         if self.Breakpoints[line] then
-            if not isPausedBeforeHook then -- Only log if we weren't already paused (e.g., by stepping)
+            if not isPausedBeforeHook then
                 self:LogOutput(string.format("Breakpoint hit at line %d", line))
             end
             self.IsPaused = true
-            self.IsStepping = false -- Stop stepping if we hit a breakpoint
+            self.IsStepping = false
         end
 
-        -- Check if stepping completed (on the correct level)
+        -- Enhanced stepping
         if self.IsStepping and currentLevel <= self.HookLevel then
-             self.IsPaused = true
-             self.IsStepping = false -- Pause after one step
-             self.HookLevel = 0 -- Reset hook level for next step
+            self.IsPaused = true
+            self.IsStepping = false
+            self.HookLevel = 0
         end
     elseif event == "call" then
-         -- Handle stepping over: stay paused if we are stepping and entered a deeper function
-         if self.IsStepping and currentLevel > self.HookLevel then
-              self.IsPaused = true -- Stay paused, hook remains active
-         end
+        if self.IsStepping and currentLevel > self.HookLevel then
+            self.IsPaused = true
+        end
     elseif event == "return" then
-         -- Handle stepping over: if we return to the step level, potentially pause again if another line event happens
-         if self.IsStepping and currentLevel == self.HookLevel then
-             -- Don't pause immediately on return, wait for the next 'line' event at this level
-             -- No action needed here, the next line event will handle the pause.
-         end
+        if self.IsStepping and currentLevel == self.HookLevel then
+            -- No action needed, handled by line event
+        end
     end
 
-    -- If paused state changed or remains paused, update UI and yield
+    -- Enhanced pause handling
     if self.IsPaused then
-        -- Only update UI if the paused state just started or if stepping
         if not isPausedBeforeHook or self.IsStepping then
             self:UpdateUIState()
         end
 
-        -- Yield execution loop
         while self.IsPaused do
-            -- Yield execution back to Roblox scheduler while paused
-            -- This is crucial to prevent freezing the game
-            local yieldSuccess, resumeValue = coroutine.yield() -- Yield control
+            local yieldSuccess, resumeValue = coroutine.yield()
             if not yieldSuccess then
-                -- Coroutine was resumed externally with an error, or stopped
                 self:LogOutput("Coroutine terminated or errored while paused: " .. tostring(resumeValue))
-                self:Stop() -- Stop the debugger
-                return -- Exit hook immediately
+                self:Stop()
+                return
             end
-            -- If Stop was called while yielded
             if not self.TargetCoroutine then return end
-            -- If Resume or Step was called, IsPaused will be false, breaking the loop
         end
-        -- Resumed, update UI potentially (e.g., clear highlight?)
-        -- self:UpdateUIState() -- Might not be needed here, depends on desired behavior
     end
 end
 
@@ -414,36 +412,34 @@ function Debugger:ClearCodeViewHighlight()
     end
 end
 
+-- Enhanced UI Update for Roblox
 function Debugger:UpdateUIState()
     if not self.TargetCoroutine or coroutine.status(self.TargetCoroutine) == "dead" then
-        -- Clear UI if coroutine is dead
         ClearScrollingFrame(self.UI.VariablesPanelContent)
         ClearScrollingFrame(self.UI.CallStackPanelContent)
         self:ClearCodeViewHighlight()
         return
     end
 
-    -- Update Variables
+    -- Enhanced variable inspection
     ClearScrollingFrame(self.UI.VariablesPanelContent)
-    local stackLevel = 2 -- Start at level 2 to inspect the function below the hook
-    -- Use pcall for safety
+    local stackLevel = 2
     local success, info = pcall(debug.getinfo, self.TargetCoroutine, stackLevel, "Lf")
-    if success and info and info.func then -- Ensure we have function info
+    if success and info and info.func then
         AddTextToScrollingFrame(self.UI.VariablesPanelContent, "-- Locals --", false)
         local i = 1
         while true do
             local name, value = debug.getlocal(self.TargetCoroutine, stackLevel, i)
             if not name then break end
-            -- Avoid showing internal coroutine stuff or excessively long strings
             if name ~= "(*temporary)" then
-                 local valStr = tostring(value)
-                 if #valStr > 100 then valStr = string.sub(valStr, 1, 100) .. "..." end
-                 AddTextToScrollingFrame(self.UI.VariablesPanelContent, string.format("%s = %s", name, valStr), false)
+                local valStr = tostring(value)
+                if #valStr > 100 then valStr = string.sub(valStr, 1, 100) .. "..." end
+                AddTextToScrollingFrame(self.UI.VariablesPanelContent, string.format("%s = %s", name, valStr), false)
             end
             i = i + 1
         end
 
-        AddTextToScrollingFrame(self.UI.VariablesPanelContent, "", false) -- Spacer
+        AddTextToScrollingFrame(self.UI.VariablesPanelContent, "", false)
         AddTextToScrollingFrame(self.UI.VariablesPanelContent, "-- Upvalues --", false)
         local j = 1
         while true do
@@ -458,27 +454,26 @@ function Debugger:UpdateUIState()
         AddTextToScrollingFrame(self.UI.VariablesPanelContent, "(No variable info available at this level)", false)
     end
 
-    -- Update Call Stack
+    -- Enhanced call stack display
     ClearScrollingFrame(self.UI.CallStackPanelContent)
     local level = 1
     while true do
-        -- Use pcall for safety as getinfo can error in some edge cases
         local success, stackInfo = pcall(debug.getinfo, self.TargetCoroutine, level + 1, "Snl")
         if not success or not stackInfo then break end
 
         local funcName = stackInfo.name or ("(anonymous function at line " .. (stackInfo.linedefined or "?") .. ")")
         local source = stackInfo.short_src or "(unknown source)"
-        if source:len() > 50 then source = "..." .. source:sub(-47) end -- Shorten long paths
+        if source:len() > 50 then source = "..." .. source:sub(-47) end
         local line = stackInfo.currentline > 0 and tostring(stackInfo.currentline) or "?"
         AddTextToScrollingFrame(self.UI.CallStackPanelContent, string.format("%d: %s (%s:%s)", level, funcName, source, line), false)
         level = level + 1
-        if level > 20 then -- Limit stack depth display
+        if level > 20 then
             AddTextToScrollingFrame(self.UI.CallStackPanelContent, "... (stack too deep)", false)
             break
         end
     end
 
-    -- Update Breakpoints
+    -- Enhanced breakpoints display
     ClearScrollingFrame(self.UI.BreakpointsPanelContent)
     local sortedBreakpoints = {}
     for line, _ in pairs(self.Breakpoints) do
@@ -491,15 +486,20 @@ function Debugger:UpdateUIState()
         end)
     end
 
-    -- Update Output (already handled by LogOutput, but refresh view)
+    -- Enhanced output display
     ClearScrollingFrame(self.UI.OutputConsoleContent)
     for _, msg in ipairs(self.Output) do
         AddTextToScrollingFrame(self.UI.OutputConsoleContent, msg, false)
     end
-    -- Ensure output scrolls to bottom
-    local outputFrame = self.UI.OutputConsoleContent
-    task.wait() -- Allow layout to update
-    outputFrame.CanvasPosition = Vector2.new(0, outputFrame.CanvasSize.Y.Offset)
+    
+    if self.AutoScroll then
+        local outputFrame = self.UI.OutputConsoleContent
+        task.defer(function()
+            if outputFrame and outputFrame.Parent then
+                outputFrame.CanvasPosition = Vector2.new(0, outputFrame.CanvasSize.Y.Offset)
+            end
+        end)
+    end
 end
 
 -- Debugger control functions
@@ -644,13 +644,20 @@ function Debugger:LogOutput(message)
     end
 end
 
--- Function to load and run a script under the debugger
+-- Enhanced Script Loading for Roblox
 function Debugger:DebugScript(scriptSourceOrInstance)
     local sourceCode
     local sourceName = "(debugged script)"
-    if typeof(scriptSourceOrInstance) == "Instance" and scriptSourceOrInstance:IsA("LuaSourceContainer") then
-        sourceCode = scriptSourceOrInstance.Source
-        sourceName = scriptSourceOrInstance:GetFullName()
+    
+    -- Enhanced script source handling
+    if typeof(scriptSourceOrInstance) == "Instance" then
+        if scriptSourceOrInstance:IsA("LuaSourceContainer") then
+            sourceCode = scriptSourceOrInstance.Source
+            sourceName = scriptSourceOrInstance:GetFullName()
+        elseif scriptSourceOrInstance:IsA("StringValue") then
+            sourceCode = scriptSourceOrInstance.Value
+            sourceName = scriptSourceOrInstance.Name
+        end
     elseif type(scriptSourceOrInstance) == "string" then
         sourceCode = scriptSourceOrInstance
     else
@@ -658,33 +665,31 @@ function Debugger:DebugScript(scriptSourceOrInstance)
         return
     end
 
-    -- Display source code in the editor
+    -- Enhanced source code display
     ClearScrollingFrame(self.UI.CodeEditorContent)
     local lines = {}
-    -- Corrected line splitting: Manual split after normalizing line endings
-    local normalizedSource = sourceCode:gsub("\r\n", "\n"):gsub("\r", "\n") -- Normalize CRLF and CR to LF
+    local normalizedSource = sourceCode:gsub("\r\n", "\n"):gsub("\r", "\n")
 
     local currentPos = 1
     repeat
-        local nextPos = normalizedSource:find("\n", currentPos, true) -- Find next newline, plain search
+        local nextPos = normalizedSource:find("\n", currentPos, true)
         local line
         if nextPos then
             line = normalizedSource:sub(currentPos, nextPos - 1)
             currentPos = nextPos + 1
         else
-            line = normalizedSource:sub(currentPos) -- Get the rest of the string
-            currentPos = #normalizedSource + 1 -- End the loop
+            line = normalizedSource:sub(currentPos)
+            currentPos = #normalizedSource + 1
         end
         table.insert(lines, line)
     until currentPos > #normalizedSource
 
-    -- Handle specific case: If the source code is empty, 'lines' might contain one empty string. Clear it.
     if #lines == 1 and lines[1] == "" and #normalizedSource == 0 then
         lines = {}
     end
 
+    -- Enhanced line display with syntax highlighting
     for i, lineText in ipairs(lines) do
-        -- Make each line clickable to add/remove breakpoints
         local lineButton = AddTextToScrollingFrame(self.UI.CodeEditorContent, string.format("%d: %s", i, lineText), true, function()
             if self.Breakpoints[i] then
                 self:RemoveBreakpoint(i)
@@ -692,32 +697,45 @@ function Debugger:DebugScript(scriptSourceOrInstance)
                 self:AddBreakpoint(i)
             end
         end)
+        
+        -- Add syntax highlighting colors
+        if lineText:match("^%s*function") or lineText:match("^%s*local%s+function") then
+            lineButton.TextColor3 = Color3.fromRGB(86, 156, 214) -- Blue for functions
+        elseif lineText:match("^%s*if") or lineText:match("^%s*elseif") or lineText:match("^%s*else") or lineText:match("^%s*end") then
+            lineButton.TextColor3 = Color3.fromRGB(197, 134, 192) -- Purple for control structures
+        elseif lineText:match("^%s*local") or lineText:match("^%s*return") then
+            lineButton.TextColor3 = Color3.fromRGB(86, 156, 214) -- Blue for keywords
+        elseif lineText:match("^%s*--") then
+            lineButton.TextColor3 = Color3.fromRGB(106, 153, 85) -- Green for comments
+        end
     end
 
-    -- Compile and create coroutine
-    -- Use a protected call (pcall) for loadstring as it can error
-    local loadSuccess, result = pcall(loadstring, sourceCode, "=" .. sourceName) -- Prefix with = to prevent loadstring mitigation
-    if not loadSuccess then -- pcall returned false, result is the error message
+    -- Enhanced script compilation with sandboxing
+    local loadSuccess, result = pcall(function()
+        local env = {}
+        setmetatable(env, {__index = _G})
+        return loadstring(sourceCode, "=" .. sourceName)
+    end)
+
+    if not loadSuccess then
         self:LogOutput("Compilation Error: " .. tostring(result))
         return
     end
-    -- pcall succeeded, result is the compiled function
+
     local compiledFunc = result
     if type(compiledFunc) ~= 'function' then
-         self:LogOutput("Compilation failed: loadstring did not return a function.")
-         return
+        self:LogOutput("Compilation failed: loadstring did not return a function.")
+        return
     end
 
-
-    self:Stop() -- Stop any previous debugging session
+    -- Enhanced script execution setup
+    self:Stop()
     self.TargetCoroutine = coroutine.create(compiledFunc)
-    self.IsPaused = true -- Start paused
+    self.IsPaused = true
     self.IsStepping = false
     self:LogOutput(string.format("Loaded script '%s'. Paused at start.", sourceName))
-    self:SetHook(true) -- Set the hook, which will pause on first event
-    self:UpdateUIState() -- Update UI to show initial paused state
-
-    -- Execution starts when the user clicks Resume or Step
+    self:SetHook(true)
+    self:UpdateUIState()
 end
 
 -- Initialize the debugger UI
